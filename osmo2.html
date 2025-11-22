@@ -1,0 +1,287 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>OsmoCalc Sport</title>
+    
+    <!-- Fehler-Handling Styles -->
+    <style>
+        body { overscroll-behavior-y: none; font-family: sans-serif; margin: 0; background-color: #f8fafc; }
+        #error-display { display: none; padding: 20px; background: #fee2e2; color: #991b1b; border-bottom: 2px solid #ef4444; font-family: monospace; white-space: pre-wrap; }
+        input[type=number]::-webkit-inner-spin-button, input[type=number]::-webkit-outer-spin-button { -webkit-appearance: none; margin: 0; }
+        .loading { padding: 40px; text-align: center; color: #64748b; }
+    </style>
+
+    <!-- 1. Fehler-Fänger Script (Startet sofort) -->
+    <script>
+        window.onerror = function(msg, url, line, col, error) {
+            var display = document.getElementById('error-display');
+            if(display) {
+                display.style.display = 'block';
+                display.innerText = "FEHLER: " + msg + "\n\nZeile: " + line + "\nSpalte: " + col;
+            }
+            return false; 
+        };
+    </script>
+    
+    <!-- 2. Externe Bibliotheken (Tailwind, React, Babel) -->
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    
+    <!-- React und ReactDOM (Development Version für bessere Fehler, falls nötig) -->
+    <script crossorigin src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
+    <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+    
+    <!-- Babel für JSX -->
+    <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+</head>
+<body>
+
+    <!-- Fehler Anzeige Container -->
+    <div id="error-display"></div>
+
+    <!-- App Root Container -->
+    <div id="root">
+        <div class="loading">
+            <h2>Lade App...</h2>
+            <p>Bitte stelle sicher, dass du eine Internetverbindung hast, um die Bibliotheken zu laden.</p>
+        </div>
+    </div>
+
+    <!-- 3. Der App Code -->
+    <script type="text/babel">
+        
+        // Sicherstellen, dass React geladen ist
+        if (typeof React === 'undefined' || typeof ReactDOM === 'undefined') {
+            throw new Error("React konnte nicht geladen werden. Bitte Internetverbindung prüfen.");
+        }
+
+        const { useState, useEffect } = React;
+
+        // --- HILFSKOMPONENTEN (Zuerst definiert) ---
+        
+        const IngredientInput = ({ label, name, value, onChange, unit, step = "1" }) => (
+            <div className="bg-white p-4 rounded-xl shadow-sm border border-slate-100 flex items-center justify-between active:scale-[0.99] transition-transform">
+                <label className="font-medium text-slate-700 flex-1 cursor-pointer" htmlFor={name}>{label}</label>
+                <div className="flex items-center gap-3">
+                    <input
+                        id={name}
+                        type="number"
+                        inputMode="decimal"
+                        step={step}
+                        name={name}
+                        value={value === 0 ? '' : value}
+                        placeholder="0"
+                        onChange={onChange}
+                        className="w-24 text-right text-lg font-bold text-slate-800 p-2 bg-slate-50 rounded-lg border-transparent focus:bg-white focus:ring-2 focus:ring-emerald-400 outline-none transition-all placeholder:text-slate-300"
+                    />
+                    <span className="text-slate-400 font-medium w-4">{unit}</span>
+                </div>
+            </div>
+        );
+
+        // --- ICONS ---
+        const Activity = ({ className }) => (
+            <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"></polyline></svg>
+        );
+        const Beaker = ({ size }) => (
+            <svg xmlns="http://www.w3.org/2000/svg" width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M4.5 3h15"/><path d="M6 3v16a2 2 0 0 0 2 2h8a2 2 0 0 0 2-2V3"/><path d="M6 14h12"/></svg>
+        );
+        const AlertTriangle = ({ size, className }) => (
+            <svg xmlns="http://www.w3.org/2000/svg" width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}><path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3Z"/><path d="M12 9v4"/><path d="M12 17h.01"/></svg>
+        );
+
+        // --- HAUPTKOMPONENTE ---
+        const OsmolarityApp = () => {
+            const [values, setValues] = useState({
+                waterVol: 500,
+                glucose: 0,
+                fructose: 0,
+                sucrose: 0,
+                maltodextrin: 0,
+                maltoDE: 19,
+                salt: 0,
+            });
+
+            const [result, setResult] = useState({
+                osmolarity: 0,
+                category: 'Hypoton',
+                color: 'text-blue-500'
+            });
+
+            const MM = {
+                glucose: 180.16,
+                fructose: 180.16,
+                sucrose: 342.30,
+                salt: 58.44
+            };
+
+            useEffect(() => {
+                try {
+                    calculateOsmolarity();
+                } catch (e) {
+                    console.error("Berechnungsfehler:", e);
+                }
+            }, [values]);
+
+            const handleInputChange = (e) => {
+                const { name, value } = e.target;
+                setValues(prev => ({
+                    ...prev,
+                    [name]: parseFloat(value) || 0
+                }));
+            };
+
+            const calculateOsmolarity = () => {
+                const n_gluc = (values.glucose / MM.glucose) * 1000;
+                const n_fruc = (values.fructose / MM.fructose) * 1000;
+                const n_suc = (values.sucrose / MM.sucrose) * 1000;
+                const n_salt = (values.salt / MM.salt) * 1000 * 2;
+
+                const safeDE = values.maltoDE < 1 ? 1 : values.maltoDE;
+                const mw_malto = 180.16 * (100 / safeDE);
+                const n_malto = (values.maltodextrin / mw_malto) * 1000;
+
+                const total_mOsm_in_portion = n_gluc + n_fruc + n_suc + n_salt + n_malto;
+                const factor = 1000 / values.waterVol;
+                const osmolarity = total_mOsm_in_portion * factor;
+
+                let category = '';
+                let color = '';
+                
+                if (osmolarity < 270) {
+                    category = 'Hypoton';
+                    color = 'text-blue-500';
+                } else if (osmolarity >= 270 && osmolarity <= 330) {
+                    category = 'Isoton';
+                    color = 'text-emerald-500';
+                } else {
+                    category = 'Hyperton';
+                    color = 'text-rose-500';
+                }
+
+                setResult({ osmolarity, category, color });
+            };
+
+            const getScalePosition = () => {
+                const maxScale = 600;
+                const pos = (result.osmolarity / maxScale) * 100;
+                return Math.min(Math.max(pos, 0), 100);
+            };
+
+            return (
+                <div className="min-h-screen pb-10">
+                    {/* Header */}
+                    <div className="bg-slate-900 text-white p-6 shadow-lg rounded-b-3xl">
+                        <div className="flex items-center justify-between mb-4">
+                            <h1 className="text-2xl font-bold flex items-center gap-2">
+                                <Activity className="text-emerald-400" />
+                                OsmoCalc
+                            </h1>
+                            <span className="text-xs bg-slate-700 px-2 py-1 rounded text-slate-300">Sports Nutrition</span>
+                        </div>
+                        
+                        <div className="text-center mt-6 mb-2">
+                            <div className="text-sm text-slate-400 uppercase tracking-wider mb-1">Errechnete Osmolarität</div>
+                            <div className="text-5xl font-black tabular-nums leading-none">
+                                {result.osmolarity.toFixed(0)}
+                            </div>
+                            <div className="text-sm text-slate-400 mt-1">mOsm/L</div>
+                            <div className={`mt-2 inline-block px-4 py-1 rounded-full font-bold text-sm bg-white/10 backdrop-blur-sm border border-white/10 ${result.color}`}>
+                                {result.category}
+                            </div>
+                        </div>
+                    </div>
+
+                    <div className="max-w-md mx-auto px-4 -mt-6">
+                        
+                        {/* Skala */}
+                        <div className="bg-white p-4 rounded-2xl shadow-md mb-6 border border-slate-100">
+                            <div className="relative h-8 w-full rounded-full bg-slate-200 mt-2 mb-6 overflow-hidden">
+                                <div className="absolute inset-0 w-full h-full" 
+                                     style={{background: 'linear-gradient(90deg, #3b82f6 0%, #3b82f6 40%, #10b981 45%, #10b981 55%, #f43f5e 60%, #f43f5e 100%)'}}>
+                                </div>
+                                <div className="absolute inset-0 flex justify-between px-2 text-[10px] font-bold text-white/80 items-center z-10">
+                                    <span className="ml-4">Hypoton</span>
+                                    <span>Isoton</span>
+                                    <span className="mr-4">Hyperton</span>
+                                </div>
+                            </div>
+                            
+                            <div className="relative h-4 w-full -mt-8">
+                                <div 
+                                className="absolute top-0 transition-all duration-500 ease-out flex flex-col items-center"
+                                style={{ left: `${getScalePosition()}%`, transform: 'translateX(-50%)' }}
+                                >
+                                <div className="w-0 h-0 border-l-[8px] border-l-transparent border-r-[8px] border-r-transparent border-b-[12px] border-b-slate-800"></div>
+                                </div>
+                            </div>
+                            <p className="text-xs text-center text-slate-400 mt-4">
+                                Idealbereich für Sport: 270 - 330 mOsm/L
+                            </p>
+                        </div>
+
+                        {/* Inputs */}
+                        <div className="space-y-3">
+                            <div className="flex items-center gap-2 mb-2 text-slate-500 font-medium text-sm uppercase tracking-wider pl-2">
+                                <Beaker size={16} />
+                                Zutaten für 500ml
+                            </div>
+
+                            <IngredientInput 
+                                label="Maltodextrin" 
+                                name="maltodextrin" 
+                                value={values.maltodextrin} 
+                                onChange={handleInputChange} 
+                                unit="g"
+                            />
+                            
+                            <div className={`transition-all duration-300 overflow-hidden ${values.maltodextrin > 0 ? 'max-h-20 opacity-100' : 'max-h-0 opacity-0'}`}>
+                                <div className="bg-slate-100 mx-2 mb-3 p-3 rounded-b-lg rounded-tr-lg border-l-4 border-slate-300 flex items-center justify-between text-sm">
+                                <label className="text-slate-600 font-medium">Dextrose-Äquivalent (DE)</label>
+                                <div className="flex items-center gap-2">
+                                    <input 
+                                    type="number" 
+                                    name="maltoDE"
+                                    value={values.maltoDE}
+                                    onChange={handleInputChange}
+                                    className="w-16 p-1 text-center rounded border border-slate-300 focus:ring-2 focus:ring-emerald-400 outline-none"
+                                    />
+                                    <span className="text-xs text-slate-400">%</span>
+                                </div>
+                                </div>
+                            </div>
+
+                            <IngredientInput label="Glucose" name="glucose" value={values.glucose} onChange={handleInputChange} unit="g" />
+                            <IngredientInput label="Fructose" name="fructose" value={values.fructose} onChange={handleInputChange} unit="g" />
+                            <IngredientInput label="Saccharose" name="sucrose" value={values.sucrose} onChange={handleInputChange} unit="g" />
+                            <IngredientInput label="Kochsalz (NaCl)" name="salt" value={values.salt} onChange={handleInputChange} unit="g" step="0.1" />
+                        </div>
+
+                        {/* Disclaimer */}
+                        <div className="mt-8 mb-8 bg-amber-50 p-4 rounded-xl border border-amber-100 flex gap-3 items-start">
+                            <AlertTriangle className="text-amber-500 shrink-0 mt-1" size={20} />
+                            <div className="text-sm text-amber-800">
+                                <p className="font-bold mb-1">Wichtiger Hinweis</p>
+                                <p>
+                                Nur weil ein Getränk rechnerisch isoton ist, ist es nicht automatisch gut verträglich. Andere Faktoren wie die <strong>Viskosität</strong> (Zähflüssigkeit), Säuregehalt und individuelle Magenempfindlichkeit spielen eine entscheidende Rolle für die Verdauung.
+                                </p>
+                            </div>
+                        </div>
+
+                    </div>
+                </div>
+            );
+        };
+
+        // App starten
+        try {
+            const root = ReactDOM.createRoot(document.getElementById('root'));
+            root.render(<OsmolarityApp />);
+        } catch (e) {
+            throw new Error("Render Error: " + e.message);
+        }
+    </script>
+</body>
+</html>
